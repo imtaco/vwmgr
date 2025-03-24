@@ -1,0 +1,17 @@
+.DS_Store
+/node_modules
+*.log
+*.swp
+/.idea/
+/config/*
+!/config/index.ts
+/coverage/
+npm-debug.log.*
+/.vscode/
+/.nyc_output/
+/.yarn/*
+!/.yarn/plugins/
+!/.yarn/releases/
+/dist/
+.eslintcache
+/data/
