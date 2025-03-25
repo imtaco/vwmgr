@@ -96,6 +96,10 @@ func PrivateKeyInfo(key []byte) (*rsa.PrivateKey, error) {
 	}
 }
 
+func IsBWSymFormat(cipher string) bool {
+	return rxBWEnc.MatchString(cipher)
+}
+
 func BWSymEncrypt(key, plain []byte) string {
 	encKey, macKey := deriveEncMacKey(key)
 	iv := RandBytes(16)
