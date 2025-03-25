@@ -7,26 +7,26 @@ import (
 	"log"
 	"os"
 
-	"github.com/caarlos0/env/v10"
 	"github.com/go-resty/resty/v2"
 	"github.com/imtaco/vwmgr/pkcs"
+	"github.com/jessevdk/go-flags"
 )
 
 type appArgs struct {
-	BaseURL      string `env:"BASE_URL"`
-	ClientID     string `env:"CLIENT_ID"`
-	ClientSecret string `env:"CLIENT_SECRET"`
-	OrgID        string `env:"ORG_ID"`
-	DeviceID     string `env:"DEVICE_ID"`
-	OrgSymKeyHex string `env:"ORG_SYM_KEY_HEX"`
-	OutputFile   string `env:"OUTPUT_FILE"`
+	BaseURL      string `long:"base_url" env:"BASE_URL"`
+	ClientID     string `long:"client_id" env:"CLIENT_ID"`
+	ClientSecret string `long:"client_secret" env:"CLIENT_SECRET"`
+	OrgUUID      string `long:"org_uuid" env:"ORG_UUID"`
+	DeviceID     string `long:"device_id" env:"DEVICE_ID"`
+	OrgSymKeyHex string `long:"org_sym_key_hex" env:"ORG_SYM_KEY_HEX"`
+	OutputFile   string `long:"output_file" env:"OUTPUT_FILE"`
 }
 
 type modifyFunc func(value interface{}) interface{}
 
 func main() {
 	args := appArgs{}
-	if err := env.Parse(&args); err != nil {
+	if _, err := flags.Parse(&args); err != nil {
 		log.Fatal(err)
 	}
 
@@ -71,7 +71,7 @@ func main() {
 	apiResp, err := restyClient.R().
 		SetAuthToken(token.AccessToken).
 		SetHeader("Accept", "application/json").
-		Get(fmt.Sprintf("%s//api/organizations/%s/export", args.BaseURL, args.OrgID))
+		Get(fmt.Sprintf("%s//api/organizations/%s/export", args.BaseURL, args.OrgUUID))
 
 	if err != nil {
 		log.Fatalf("fail to fetch data: %v", err)

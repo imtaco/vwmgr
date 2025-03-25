@@ -145,6 +145,18 @@ func BWSymDecrypt(key []byte, cipher string) ([]byte, error) {
 	return plaintext, nil
 }
 
+func BWSymDecryptMany(key []byte, ciphers ...string) ([][]byte, error) {
+	results := make([][]byte, 0, len(ciphers))
+	for _, c := range ciphers {
+		if d, err := BWSymDecrypt(key, c); err != nil {
+			return nil, err
+		} else {
+			results = append(results, d)
+		}
+	}
+	return results, nil
+}
+
 func deriveEncMacKey(key []byte) (encKey []byte, macKey []byte) {
 	if len(key) == 32 {
 		encKey = hkdfExpand(key, "enc", 32)
@@ -191,7 +203,7 @@ func Base64Decode(data string) ([]byte, error) {
 }
 
 func Base64DecodeMany(data ...string) ([][]byte, error) {
-	var results [][]byte
+	results := make([][]byte, 0, len(data))
 	for _, d := range data {
 		v, err := Base64Decode(d)
 		if err != nil {

@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (m *VMManager) Register(
+func (m *VMManager) createUser(
 	email string,
 	name string,
 	masterPassword string,
@@ -35,7 +35,7 @@ func (m *VMManager) Register(
 			Name:               name,
 			Email:              email,
 			PasswordHash:       hashPwdHash,
-			PasswordIterations: ITERATIONS,
+			PasswordIterations: pkcs.ITERATIONS,
 			Salt:               salt,
 			Akey:               userAkey,
 			PublicKey:          pkcs.Base64Encode(publicKey),
@@ -43,7 +43,7 @@ func (m *VMManager) Register(
 			EquivalentDomains:  "[]",
 			ExcludedGlobals:    "[]",
 			SecurityStamp:      uuid.NewString(),
-			ClientKdfIter:      ITERATIONS,
+			ClientKdfIter:      pkcs.ITERATIONS,
 		}
 		if err := tx.Create(&user).Error; err != nil {
 			return err

@@ -10,17 +10,13 @@ import (
 	"gorm.io/gorm"
 )
 
-func (m *VMManager) ResetPassword(
+func (m *VMManager) resetUserPassword(
 	email string,
-	name string,
 	newMasterPassword string,
 ) error {
 	// simple validation
 	if email == "" {
 		return errors.New("email is required")
-	}
-	if name == "" {
-		return errors.New("name is required")
 	}
 
 	userMasterKey := pkcs.DeriveMasterKey(email, newMasterPassword)
@@ -39,28 +35,29 @@ func (m *VMManager) ResetPassword(
 		panic(err)
 	}
 
+	user := model.User{}
+	if err := m.db.Where("email = ?", email).First(&user).Error; err != nil {
+		return err
+	}
+
 	return m.db.Transaction(func(tx *gorm.DB) error {
-		user := model.User{
-			Email: email,
-		}
-		err := tx.Model(&user).Updates(model.User{
-			PasswordHash: hashPwdHash,
-			Salt:         salt,
-			Akey:         userAkey,
-			PublicKey:    pkcs.Base64Encode(publicKey),
-			PrivateKey:   pkcs.BWSymEncrypt(symKey, privateKey),
-		}).Error
+		err := tx.Model(&model.User{}).Where("uuid = ?", user.UUID).
+			Updates(map[string]interface{}{
+				"password_hash": hashPwdHash,
+				"salt":          salt,
+				"akey":          userAkey,
+				"public_key":    pkcs.Base64Encode(publicKey),
+				"private_key":   pkcs.BWSymEncrypt(symKey, privateKey),
+			}).Error
 		if err != nil {
 			return err
 		}
 
 		// TODO: need to change security_stamp ?
-		userOrg := model.UsersOrganization{
-			UserUUID: user.UUID,
-		}
-		err = tx.Model(&userOrg).Updates(model.UsersOrganization{
-			Akey: pkcs.BWPKEncrypt(m.orgSymKey, pubInf.(*rsa.PublicKey)),
-		}).Error
+		err = tx.Model(&model.UsersOrganization{}).
+			Where("user_uuid = ?", user.UUID).
+			Update("akey", pkcs.BWPKEncrypt(m.orgSymKey, pubInf.(*rsa.PublicKey))).
+			Error
 		if err != nil {
 			return err
 		}

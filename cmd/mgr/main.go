@@ -4,35 +4,29 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"net/http"
 
-	"github.com/caarlos0/env/v10"
 	"github.com/gin-gonic/gin"
 	"github.com/imtaco/vwmgr/mgr"
+	"github.com/jessevdk/go-flags"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 type appArgs struct {
-	DbHost     string `env:"DB_HOST"`
-	DbPort     int    `env:"DB_PORT"`
-	DbUser     string `env:"DB_USER"`
-	DbPassword string `env:"DB_PASSWORD"`
-	DbDatabase string `env:"DB_DATABASE"`
-	BindAddr   string `env:"BIND_ADDR" envDefault:":9090"`
+	DbHost     string `long:"db_host" env:"DB_HOST"`
+	DbPort     int    `long:"db_port" env:"DB_PORT" default:"5432"`
+	DbUser     string `long:"db_user" env:"DB_USER"`
+	DbPassword string `long:"db_password" env:"DB_PASSWORD"`
+	DbDatabase string `long:"db_database" env:"DB_DATABASE"`
+	BindAddr   string `long:"bind_addr" env:"BIND_ADDR" default:":9090"`
 
-	OrgUUID      string `env:"ORG_UUID"`
-	OrgSymKeyHex string `env:"ORG_SYM_KEY_HEX"`
-}
-type userInfo struct {
-	Email    string
-	Name     string
-	Password string
+	OrgUUID      string `long:"org_uuid" env:"ORG_UUID"`
+	OrgSymKeyHex string `long:"org_sym_key_hex" env:"ORG_SYM_KEY_HEX"`
 }
 
 func main() {
 	args := appArgs{}
-	if err := env.Parse(&args); err != nil {
+	if _, err := flags.Parse(&args); err != nil {
 		log.Fatal("err:", err)
 	}
 
@@ -63,32 +57,7 @@ func main() {
 
 	// TODO: switch to prod
 	g := gin.Default()
-
-	g.POST("/api/register", func(c *gin.Context) {
-		u := userInfo{}
-
-		// Bind JSON from request body into `user`
-		if err := c.ShouldBindJSON(&u); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// TODO: payload validation
-		// email in email regepx & domain
-		// len(password) >= 12
-		// name is not empty
-		log.Printf("try to register %+v", u)
-		err = mgr.Register(
-			u.Email,
-			u.Name,
-			u.Password,
-		)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-
-		c.JSON(http.StatusCreated, gin.H{"status": "ok"})
-	})
+	mgr.Bind(g)
 
 	g.Run(args.BindAddr)
 }

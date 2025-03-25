@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/caarlos0/env/v10"
+	"github.com/jessevdk/go-flags"
 )
 
 var (
@@ -30,18 +30,23 @@ var (
 )
 
 type appArgs struct {
-	BindAddr    string  `env:"BIND_ADDR" envDefault:":8080"`
-	UpStreamURL url.URL `env:"UP_STREAM_URL"`
+	BindAddr    string `long:"bind_addr" env:"BIND_ADDR" default:":8080"`
+	UpStreamURL string `long:"up_stream_url" env:"UP_STREAM_URL"`
 }
 
 func main() {
 	args := appArgs{}
-	if err := env.Parse(&args); err != nil {
+	if _, err := flags.Parse(&args); err != nil {
 		log.Fatal("err:", err)
 	}
 
 	// TODO: basic args validation
+	remote, err := url.Parse(args.UpStreamURL)
+	if err != nil {
+		log.Fatalf("fail to parse upstream url %v", err)
+	}
 
+	proxy := httputil.NewSingleHostReverseProxy(remote)
 	handler := func(p *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			// following operation is forbidden
@@ -56,30 +61,23 @@ func main() {
 				}
 			}
 
-			if r.URL.Path == "/" {
-				// for auto fill email in login form
-				// add r=1 to prevent redirect loops
-				if r.URL.Query().Get("r") != "1" {
-					email := getIAPHeader(w, r)
-					if email == "" {
-						return
-					}
-					http.Redirect(w, r, "/?r=1#/login?email="+email, http.StatusTemporaryRedirect)
-					return
-				}
-			}
-
 			// need more access logs ?
-			r.Host = args.UpStreamURL.Host
+			r.Host = remote.Host
 			p.ServeHTTP(w, r)
 		}
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(&args.UpStreamURL)
-	http.HandleFunc("/", handler(proxy))
+	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		// for auto fill email in login form
+		email := getIAPHeader(w, r)
+		if email == "" {
+			return
+		}
+		http.Redirect(w, r, "/#login?email="+email, http.StatusTemporaryRedirect)
+	})
 
-	err := http.ListenAndServe(args.BindAddr, nil)
-	if err != nil {
+	http.HandleFunc("/", handler(proxy))
+	if err := http.ListenAndServe(args.BindAddr, nil); err != nil {
 		log.Fatal(err)
 	}
 }

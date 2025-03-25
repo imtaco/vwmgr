@@ -1,4 +1,6 @@
-# Pseudo-Code
+# Flow
+
+## Pseudo-Code
 
 ```js
 // user to enc/dec org level items
@@ -58,4 +60,21 @@ encPkBW(publicKey, plain) {
 	encrypted = encPublicKey(publicKey, plain)
 	return `4.(encrypted.b64)`
 }
+```
+
+## Key Relationship
+
+```mermaid
+graph TD
+    email["email + masterPwd"] --> |derive| masterKey["masterKey"]
+
+    masterKey -->|enc/dec| symKey["User SymKey"]
+    symKey -->|enc/dec| personalVault["Personal Vault"]
+
+    symKey -->|enc/dec| privateKey["User Private Key"]
+    privateKey -->|pair| publicKey["User Public Key"]
+
+    publicKey -->|enc| orgSymKey["Org SymKey"]
+    orgSymKey -->|enc/dec| orgVault["Org Vault"]
+    privateKey -->|dec| orgSymKey
 ```

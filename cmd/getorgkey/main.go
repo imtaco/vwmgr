@@ -4,22 +4,22 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/caarlos0/env/v10"
 	"github.com/imtaco/vwmgr/pkcs"
+	"github.com/jessevdk/go-flags"
 )
 
 type appArgs struct {
-	UserEmail      string `env:"USER_EMAIL"`
-	UserMasterPwd  string `env:"USER_MASTER_PWD"`
-	UserAKey       string `env:"USER_AKEY"`
-	UserPrivateKey string `env:"USER_PRIVATE_KEY"`
-	UserOrgAkey    string `env:"USER_ORG_AKEY"`
+	UserEmail      string `long:"user_email" env:"USER_EMAIL"`
+	UserMasterPwd  string `long:"user_master_pwd" env:"USER_MASTER_PWD"`
+	UserAKey       string `long:"user_akey" env:"USER_AKEY"`
+	UserPrivateKey string `long:"user_private_key" venv:"USER_PRIVATE_KEY"`
+	UserOrgAkey    string `long:"user_org_akey" venv:"USER_ORG_AKEY"`
 }
 
 func main() {
 	args := appArgs{}
-	if err := env.Parse(&args); err != nil {
-		log.Fatal(err)
+	if _, err := flags.Parse(&args); err != nil {
+		log.Fatal("err:", err)
 	}
 
 	// TODO: retrieve from DB ?
