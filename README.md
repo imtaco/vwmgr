@@ -1,6 +1,6 @@
 # VaultWarden Bulk User Creator
 
-A simple CLI tool for batch-creating users in [VaultWarden](https://github.com/dani-garcia/vaultwarden), the lightweight Bitwarden-compatible password manager. This tool assumes that there is only one organization in a VaultWarden site.”
+A simple CLI tool for batch-creating users in [VaultWarden](https://github.com/dani-garcia/vaultwarden), the lightweight Bitwarden-compatible password manager.
 
 ## 🚀 Features
 
@@ -23,13 +23,14 @@ Create a user with email, name and master password. The created users will be in
 
 Request
 ```http
-POST /api/users/register HTTP/1.1
+POST /api/users HTTP/1.1
 Content-Type: application/json
 
 {
     "name": "test01",
     "email": "test01@foobar.com",
-    "password": "foobarfoobar"
+    "password": "foobarfoobar",
+    "org_uuid": ["7ee41f5e-c8b1-4936-84ec-6d8cf5d2d9bd", "47a0c70e-c4f0-4af8-a770-a28cc594fc3d"]
 }
 ```
 
@@ -50,7 +51,7 @@ POST /api/users/test01@foobar.com/reset HTTP/1.1
 Content-Type: application/json
 
 {
-    "password": "barfoobarfoo"
+    "new_password": "barfoobarfoo"
 }
 ```
 
@@ -67,14 +68,16 @@ List all items in the orginzation.
 
 Request
 ```http
-GET /api/org/items HTTP/1.1
+GET /api/orgs/items HTTP/1.1
 ```
 
 Response
-```
+```json
 [
     {
         "email": "user01@foobar.com",
+        "org_uuid": "30136542-0378-4fe7-9afd-1a8d973df2c9",
+        "org_name": "org001",
         "collection_id": "c79d5f48-1f9c-4be4-8a60-2c0e7d123f33",
         "collection_name": "SaaS Services",
         "item_uuid": "a3f1d2b0-89a1-4c9f-9152-d58c5c8b9bfa",
@@ -86,6 +89,8 @@ Response
     },
     {
         "email": "user02@foobar.com",
+        "org_uuid": "30136542-0378-4fe7-9afd-1a8d973df2c9",
+        "org_name": "org001",
         "collection_id": "0f2b91e4-87cf-4424-8320-81c957b71d91",
         "collection_name": "DB Accounts",
         "item_uuid": "d14f32a9-b7e8-4cf2-b82a-182e94a2b62a",
@@ -97,6 +102,8 @@ Response
     },
     {
         "email": "user32@foobar.com",
+        "org_uuid": "55d1c21b-f7f3-4129-a8f7-21f89fa5a524",
+        "org_name": "org002",
         "collection_id": "0f2b91e4-87cf-4424-8320-81c957b71d91",
         "collection_name": "Payment",
         "item_uuid": "d14f32a9-b7e8-4cf2-b82a-182e94a2b62a",
@@ -122,11 +129,15 @@ Response
 ```json
 [
     {
+        "org_uuid": "55d1c21b-f7f3-4129-a8f7-21f89fa5a524",
+        "org_name": "org002",
         "collection_uuid": "ffffffff-3333-4444-aaaa-bbbbbbbbbbbb",
         "collection_name": "foolbar",
         "email": "user01@foobar.com"
     },
     {
+        "org_uuid": "30136542-0378-4fe7-9afd-1a8d973df2c9",
+        "org_name": "org001",
         "collection_uuid": "eeeeeeee-2222-3333-bbbb-cccccccccccc",
         "collection_name": "barfoo",
         "collection_name": "foolbar",

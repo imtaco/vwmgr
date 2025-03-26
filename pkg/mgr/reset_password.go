@@ -3,10 +3,10 @@ package mgr
 import (
 	"crypto/rsa"
 	"crypto/x509"
-	"errors"
 
 	"github.com/imtaco/vwmgr/pkg/model"
 	"github.com/imtaco/vwmgr/pkg/pkcs"
+	"github.com/pkg/errors"
 	"gorm.io/gorm"
 )
 
@@ -40,6 +40,19 @@ func (m *VMManager) resetUserPassword(
 		return err
 	}
 
+	userOrgs := []model.UsersOrganization{}
+	if err := m.db.Where("user_uuid = ?", user.UUID).Find(&userOrgs).Error; err != nil {
+		// not found or real error
+		return err
+	}
+
+	// check orgSymKey first
+	for _, uo := range userOrgs {
+		if _, ok := m.orgSymKeys[uo.OrgUUID]; !ok {
+			return errors.Errorf("fail to found orr symmetric key of %s", uo.OrgUUID)
+		}
+	}
+
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		err := tx.Model(&model.User{}).Where("uuid = ?", user.UUID).
 			Updates(map[string]interface{}{
@@ -53,14 +66,17 @@ func (m *VMManager) resetUserPassword(
 			return err
 		}
 
-		// TODO: need to change security_stamp ?
-		err = tx.Model(&model.UsersOrganization{}).
-			Where("user_uuid = ?", user.UUID).
-			Update("akey", pkcs.BWPKEncrypt(m.orgSymKey, pubInf.(*rsa.PublicKey))).
-			Error
-		if err != nil {
-			return err
+		for _, uo := range userOrgs {
+			err = tx.Model(&model.UsersOrganization{}).
+				Where("uuid = ?", uo.UUID).
+				Update("akey", pkcs.BWPKEncrypt(m.orgSymKeys[uo.OrgUUID], pubInf.(*rsa.PublicKey))).
+				Error
+			if err != nil {
+				return err
+			}
 		}
+
+		// TODO: need to change security_stamp ?
 
 		return nil
 	})

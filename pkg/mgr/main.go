@@ -11,21 +11,18 @@ import (
 )
 
 func New(
-	orgUUID string,
-	orgSymKey []byte,
+	orgSymKeys map[string][]byte,
 	db *gorm.DB,
 ) *VMManager {
 	return &VMManager{
-		orgUUID:   orgUUID,
-		orgSymKey: orgSymKey,
-		db:        db,
+		orgSymKeys: orgSymKeys,
+		db:         db,
 	}
 }
 
 type VMManager struct {
-	orgUUID   string
-	orgSymKey []byte
-	db        *gorm.DB
+	orgSymKeys map[string][]byte
+	db         *gorm.DB
 }
 
 type userEmail struct {
@@ -33,11 +30,12 @@ type userEmail struct {
 }
 
 func (m *VMManager) Bind(g *gin.Engine) {
-	g.POST("/api/users/register", func(c *gin.Context) {
+	g.POST("/api/users", func(c *gin.Context) {
 		type userInfo struct {
-			Email    string `binding:"required,email,max=64"`
-			Name     string `binding:"required,min=2,max=32"`
-			Password string `binding:"required,min=12,max=128"`
+			Email    string   `json:"email" binding:"required,email,max=64"`
+			Name     string   `json:"name" binding:"required,min=2,max=32"`
+			Password string   `json:"password" binding:"required,min=12,max=128"`
+			OrgUUID  []string `json:"org_uuid" binding:"required,dive,uuid"`
 		}
 		u := userInfo{}
 
@@ -48,7 +46,7 @@ func (m *VMManager) Bind(g *gin.Engine) {
 
 		log.Printf("try to register %+v", u)
 
-		if err := m.createUser(u.Email, u.Name, u.Password); err != nil {
+		if err := m.createUser(u.Email, u.Name, u.Password, u.OrgUUID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -64,12 +62,11 @@ func (m *VMManager) Bind(g *gin.Engine) {
 		}
 
 		type userInfo struct {
-			NewPassword string `binding:"required,min=12,max=128"`
+			NewPassword string `json:"new_password" binding:"required,min=12,max=128"`
 		}
 		nu := userInfo{}
-
 		// Bind JSON from request body into `user`
-		if err := c.ShouldBindJSON(&u); err != nil {
+		if err := c.ShouldBindJSON(&nu); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -88,7 +85,7 @@ func (m *VMManager) Bind(g *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	g.GET("/api/org/items", func(c *gin.Context) {
+	g.GET("/api/orgs/items", func(c *gin.Context) {
 		log.Println("dump org items")
 
 		items, err := m.listOrgItems()
@@ -99,7 +96,13 @@ func (m *VMManager) Bind(g *gin.Engine) {
 
 		results := make([]orgItemDetail, 0, len(items))
 		for _, d := range items {
-			p, err := pkcs.BWSymDecryptMany(m.orgSymKey, d.CollectionName, d.ItemName)
+			orgSymKey, ok := m.orgSymKeys[d.OrgUUID]
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "fail to find some org sym key"})
+				return
+			}
+
+			p, err := pkcs.BWSymDecryptMany(orgSymKey, d.CollectionName, d.ItemName)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -107,7 +110,7 @@ func (m *VMManager) Bind(g *gin.Engine) {
 			d.CollectionName, d.ItemName = string(p[0]), string(p[1])
 
 			if d.AccountName != "" {
-				accountNameDec, err := pkcs.BWSymDecrypt(m.orgSymKey, d.AccountName)
+				accountNameDec, err := pkcs.BWSymDecrypt(orgSymKey, d.AccountName)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 					return
@@ -132,13 +135,23 @@ func (m *VMManager) Bind(g *gin.Engine) {
 
 		items, err := m.userDepartReport(u.Email)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
 			return
 		}
 
 		results := []leaveUserItem{}
 		for _, d := range items {
-			colName, err := pkcs.BWSymDecrypt(m.orgSymKey, d.CollectionName)
+			orgSymKey, ok := m.orgSymKeys[d.OrgUUID]
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "fail to find some org sym key"})
+				return
+			}
+
+			colName, err := pkcs.BWSymDecrypt(orgSymKey, d.CollectionName)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return

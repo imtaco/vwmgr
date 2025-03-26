@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/imtaco/vwmgr/pkg/model"
 	"github.com/imtaco/vwmgr/pkg/pkcs"
+	"github.com/pkg/errors"
 	"gorm.io/gorm"
 )
 
@@ -11,6 +12,7 @@ func (m *VMManager) createUser(
 	email string,
 	name string,
 	masterPassword string,
+	orgUUIDs []string,
 ) error {
 	userMasterKey := pkcs.DeriveMasterKey(email, masterPassword)
 	passwordHash := pkcs.DerivePasswordHash(userMasterKey, masterPassword)
@@ -27,6 +29,13 @@ func (m *VMManager) createUser(
 	pubInf, err := pkcs.PublicKeyInfo(publicKey)
 	if err != nil {
 		return err
+	}
+
+	// check orgSymKey first
+	for _, orgUUID := range orgUUIDs {
+		if _, ok := m.orgSymKeys[orgUUID]; !ok {
+			return errors.Errorf("fail to found orr symmetric key of %s", orgUUID)
+		}
 	}
 
 	return m.db.Transaction(func(tx *gorm.DB) error {
@@ -49,17 +58,19 @@ func (m *VMManager) createUser(
 			return err
 		}
 
-		userOrg := model.UsersOrganization{
-			UUID:      uuid.NewString(),
-			UserUUID:  uid,
-			OrgUUID:   m.orgUUID,
-			Akey:      pkcs.BWPKEncrypt(m.orgSymKey, pubInf),
-			AccessAll: false,
-			Status:    2,
-			Atype:     3,
-		}
-		if err := tx.Create(&userOrg).Error; err != nil {
-			return err
+		for _, orgUUID := range orgUUIDs {
+			userOrg := model.UsersOrganization{
+				UUID:      uuid.NewString(),
+				UserUUID:  uid,
+				OrgUUID:   orgUUID,
+				Akey:      pkcs.BWPKEncrypt(m.orgSymKeys[orgUUID], pubInf),
+				AccessAll: false,
+				Status:    2,
+				Atype:     3,
+			}
+			if err := tx.Create(&userOrg).Error; err != nil {
+				return err
+			}
 		}
 
 		return nil

@@ -1,25 +1,28 @@
 package main
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/imtaco/vwmgr/pkg/common"
 	"github.com/imtaco/vwmgr/pkg/pkcs"
+	"github.com/imtaco/vwmgr/pkg/utils"
 	"github.com/jessevdk/go-flags"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type appArgs struct {
+	DatabaseURL  string `long:"database_url" env:"DATABASE_URL"`
 	BaseURL      string `long:"base_url" env:"BASE_URL"`
-	ClientID     string `long:"client_id" env:"CLIENT_ID"`
-	ClientSecret string `long:"client_secret" env:"CLIENT_SECRET"`
-	OrgUUID      string `long:"org_uuid" env:"ORG_UUID"`
+	SaUserEmail  string `long:"sa_user_email" env:"SA_USER_EMAIL"`
+	SaPassword   string `long:"sa_user_password" env:"SA_USER_PASSWORD"`
 	DeviceID     string `long:"device_id" env:"DEVICE_ID"`
-	OrgSymKeyHex string `long:"org_sym_key_hex" env:"ORG_SYM_KEY_HEX"`
-	OutputFile   string `long:"output_file" env:"OUTPUT_FILE"`
+	OutputFolder string `long:"output_folder" env:"OUTPUT_FOLDER"`
 }
 
 type modifyFunc func(value interface{}) interface{}
@@ -30,20 +33,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	orgSymKey, err := hex.DecodeString(args.OrgSymKeyHex)
-	if err != nil {
-		log.Fatalf("fail to parse org sym key %v", err)
-	}
-
 	restyClient := resty.New()
+
+	userMasterKey := pkcs.DeriveMasterKey(args.SaUserEmail, args.SaPassword)
+	passwordHash := pkcs.DerivePasswordHash(userMasterKey, args.SaPassword)
 
 	resp, err := restyClient.R().
 		SetHeader("Content-Type", "application/x-www-form-urlencoded").
 		SetFormData(map[string]string{
-			"grant_type":        "client_credentials",
-			"scope":             "api",
-			"client_id":         args.ClientID,
-			"client_secret":     args.ClientSecret,
+			"grant_type":        "password",
+			"scope":             "api offline_access",
+			"client_id":         "web",
+			"username":          args.SaUserEmail,
+			"password":          passwordHash,
 			"device_type":       "9",
 			"device_identifier": args.DeviceID,
 			"device_name":       "chrome",
@@ -67,47 +69,67 @@ func main() {
 
 	log.Println("✅ access Token received")
 
-	// Step 2: Use Access Token to get JSON data
-	apiResp, err := restyClient.R().
-		SetAuthToken(token.AccessToken).
-		SetHeader("Accept", "application/json").
-		Get(fmt.Sprintf("%s//api/organizations/%s/export", args.BaseURL, args.OrgUUID))
-
+	dsn, err := utils.PGURLtoGormDSN(args.DatabaseURL)
 	if err != nil {
-		log.Fatalf("fail to fetch data: %v", err)
-	}
-	if !resp.IsSuccess() {
-		log.Fatalf("fail to fetch data, status: %d, msg: %s", apiResp.StatusCode(), string(apiResp.Body()))
-	}
-	log.Println("✅ data received:")
-
-	var results interface{}
-	if err := json.Unmarshal(apiResp.Body(), &results); err != nil {
-		log.Fatal(err)
+		log.Fatalf("fail to convert pg URL to dsn %v", err)
 	}
 
-	mod := func(value interface{}) interface{} {
-		strValue, ok := value.(string)
-		if !ok || !pkcs.IsBWSymFormat(strValue) {
-			return value
-		}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatal("fail to open DB", err)
+	}
 
-		bs, err := pkcs.BWSymDecrypt(orgSymKey, strValue)
+	orgSymKeys, err := common.GetOrgSymKeys(db, args.SaUserEmail, args.SaPassword)
+	if err != nil {
+		log.Fatalf("fail to get orgSymKey %v", err)
+	}
+
+	for orgUUID, orgSymKey := range orgSymKeys {
+		outputFile := filepath.Join(args.OutputFolder, fmt.Sprintf("%s.json", orgUUID))
+
+		// Use Access Token to get JSON data
+		apiResp, err := restyClient.R().
+			SetAuthToken(token.AccessToken).
+			SetHeader("Accept", "application/json").
+			Get(fmt.Sprintf("%s//api/organizations/%s/export", args.BaseURL, orgUUID))
+
 		if err != nil {
-			return value
+			log.Fatalf("fail to fetch data: %v", err)
+		}
+		if !resp.IsSuccess() {
+			log.Fatalf("fail to fetch data, status: %d, msg: %s", apiResp.StatusCode(), string(apiResp.Body()))
+		}
+		log.Printf("✅ data received: %s", orgUUID)
+
+		var results interface{}
+		if err := json.Unmarshal(apiResp.Body(), &results); err != nil {
+			log.Fatal(err)
 		}
 
-		return string(bs)
-	}
+		mod := func(value interface{}) interface{} {
+			// attempt to decrypt fields using the Bitwarden format
+			strValue, ok := value.(string)
+			if !ok || !pkcs.IsBWSymFormat(strValue) {
+				return value
+			}
 
-	results = traverseAndModify(results, mod)
+			bs, err := pkcs.BWSymDecrypt(orgSymKey, strValue)
+			if err != nil {
+				return value
+			}
 
-	bs, err := json.Marshal(results)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := os.WriteFile(args.OutputFile, bs, 0644); err != nil {
-		log.Fatalf("fail to write file %s, err: %v", args.OutputFile, err)
+			return string(bs)
+		}
+
+		results = traverseAndModify(results, mod)
+
+		bs, err := json.Marshal(results)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := os.WriteFile(outputFile, bs, 0644); err != nil {
+			log.Fatalf("fail to write file %s, err: %v", outputFile, err)
+		}
 	}
 }
 
