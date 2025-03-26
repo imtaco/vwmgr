@@ -7,15 +7,15 @@ import (
 )
 
 type orgItemDetail struct {
-	Email          string
-	CollectionUUID string
-	CollectionName string
-	CipherName     string
-	AccountName    string
-	ReadOnly       bool
-	Manage         bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	Email          string    `json:"email"`
+	CollectionUUID string    `json:"collection_uuid"`
+	CollectionName string    `json:"collection_name"`
+	ItemUUID       string    `json:"item_uuid"`
+	ItemName       string    `json:"item_name"`
+	AccountName    string    `json:"account_name"`
+	Access         string    `json:"access"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func (m *VMManager) listOrgItems() ([]orgItemDetail, error) {
@@ -26,10 +26,14 @@ func (m *VMManager) listOrgItems() ([]orgItemDetail, error) {
 		u.email,
 		c.uuid as collection_uuid,
 		c.name as collection_name,
-		p.name as cipher_name,
+		p.uuid as item_uuid,
+		p.name as item_name,
 		(p.data::json)->>'username' as account_name,
-		uc.read_only,
-		uc.manage,
+		CASE
+			WHEN uc.manage = TRUE THEN 'manage'
+			WHEN uc.read_only = FALSE THEN 'edit'
+			ELSE 'view'
+		END as access,
 		p.created_at,
 		p.updated_at
 	FROM

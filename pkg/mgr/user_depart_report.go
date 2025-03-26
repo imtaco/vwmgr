@@ -5,9 +5,9 @@ import (
 )
 
 type leaveUserItem struct {
-	CollectionUUID string
-	CollectionName string
-	Email          string
+	CollectionUUID string `json:"collection_uuid"`
+	CollectionName string `json:"collection_name"`
+	Email          string `json:"email"`
 }
 
 func (m *VMManager) userDepartReport(email string) ([]leaveUserItem, error) {

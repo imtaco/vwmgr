@@ -99,12 +99,12 @@ func (m *VMManager) Bind(g *gin.Engine) {
 
 		results := make([]orgItemDetail, 0, len(items))
 		for _, d := range items {
-			p, err := pkcs.BWSymDecryptMany(m.orgSymKey, d.CollectionName, d.CipherName)
+			p, err := pkcs.BWSymDecryptMany(m.orgSymKey, d.CollectionName, d.ItemName)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			d.CollectionName, d.CipherName = string(p[0]), string(p[1])
+			d.CollectionName, d.ItemName = string(p[0]), string(p[1])
 
 			if d.AccountName != "" {
 				accountNameDec, err := pkcs.BWSymDecrypt(m.orgSymKey, d.AccountName)
@@ -121,14 +121,14 @@ func (m *VMManager) Bind(g *gin.Engine) {
 		c.JSON(http.StatusOK, results)
 	})
 
-	g.GET("/api/users/:email/leave_report", func(c *gin.Context) {
+	g.GET("/api/users/:email/depart_report", func(c *gin.Context) {
 		u := userEmail{}
 		if err := c.ShouldBindUri(&u); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		log.Printf("get leave user report of %s", u.Email)
+		log.Printf("get depart user report of %s", u.Email)
 
 		items, err := m.userDepartReport(u.Email)
 		if err != nil {
