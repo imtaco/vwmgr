@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imtaco/vwmgr/pkcs"
+	"github.com/imtaco/vwmgr/pkg/pkcs"
 	"gorm.io/gorm"
 )
 

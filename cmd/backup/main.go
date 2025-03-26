@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/imtaco/vwmgr/pkcs"
+	"github.com/imtaco/vwmgr/pkg/pkcs"
 	"github.com/jessevdk/go-flags"
 )
 

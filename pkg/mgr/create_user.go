@@ -2,8 +2,8 @@ package mgr
 
 import (
 	"github.com/google/uuid"
-	"github.com/imtaco/vwmgr/model"
-	"github.com/imtaco/vwmgr/pkcs"
+	"github.com/imtaco/vwmgr/pkg/model"
+	"github.com/imtaco/vwmgr/pkg/pkcs"
 	"gorm.io/gorm"
 )
 

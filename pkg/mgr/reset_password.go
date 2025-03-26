@@ -5,8 +5,8 @@ import (
 	"crypto/x509"
 	"errors"
 
-	"github.com/imtaco/vwmgr/model"
-	"github.com/imtaco/vwmgr/pkcs"
+	"github.com/imtaco/vwmgr/pkg/model"
+	"github.com/imtaco/vwmgr/pkg/pkcs"
 	"gorm.io/gorm"
 )
 

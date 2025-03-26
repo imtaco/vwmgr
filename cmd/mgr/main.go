@@ -2,24 +2,19 @@ package main
 
 import (
 	"encoding/hex"
-	"fmt"
 	"log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imtaco/vwmgr/mgr"
+	"github.com/imtaco/vwmgr/pkg/mgr"
+	"github.com/imtaco/vwmgr/pkg/utils"
 	"github.com/jessevdk/go-flags"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 type appArgs struct {
-	DbHost     string `long:"db_host" env:"DB_HOST"`
-	DbPort     int    `long:"db_port" env:"DB_PORT" default:"5432"`
-	DbUser     string `long:"db_user" env:"DB_USER"`
-	DbPassword string `long:"db_password" env:"DB_PASSWORD"`
-	DbDatabase string `long:"db_database" env:"DB_DATABASE"`
-	BindAddr   string `long:"bind_addr" env:"BIND_ADDR" default:":9090"`
-
+	DatabaseURL  string `long:"database_url" env:"DATABASE_URL"`
+	BindAddr     string `long:"bind_addr" env:"BIND_ADDR" default:":9090"`
 	OrgUUID      string `long:"org_uuid" env:"ORG_UUID"`
 	OrgSymKeyHex string `long:"org_sym_key_hex" env:"ORG_SYM_KEY_HEX"`
 }
@@ -37,18 +32,12 @@ func main() {
 		log.Fatalf("fail to parse org sym key %v", err)
 	}
 
-	db, err := gorm.Open(
-		postgres.Open(
-			fmt.Sprintf(
-				"host=%s port=%d user=%s dbname=%s password=%s sslmode=disable",
-				args.DbHost,
-				args.DbPort,
-				args.DbUser,
-				args.DbDatabase,
-				args.DbPassword,
-			)),
-		&gorm.Config{},
-	)
+	dsn, err := utils.PGURLtoGormDSN(args.DatabaseURL)
+	if err != nil {
+		log.Fatalf("fail to convert pg URL to dsn %v", err)
+	}
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatal("fail to open DB", err)
 	}

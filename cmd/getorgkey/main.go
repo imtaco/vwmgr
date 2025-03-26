@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/imtaco/vwmgr/pkcs"
+	"github.com/imtaco/vwmgr/pkg/pkcs"
 	"github.com/jessevdk/go-flags"
 )
 
