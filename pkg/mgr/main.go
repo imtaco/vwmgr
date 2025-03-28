@@ -12,16 +12,19 @@ import (
 
 func New(
 	orgSymKeys map[string][]byte,
+	apiKey string,
 	db *gorm.DB,
 ) *VMManager {
 	return &VMManager{
 		orgSymKeys: orgSymKeys,
+		apiKey:     apiKey,
 		db:         db,
 	}
 }
 
 type VMManager struct {
 	orgSymKeys map[string][]byte
+	apiKey     string
 	db         *gorm.DB
 }
 
@@ -30,6 +33,8 @@ type userEmail struct {
 }
 
 func (m *VMManager) Bind(g *gin.Engine) {
+	g.Use(m.validateAPIKey)
+
 	g.POST("/api/users", func(c *gin.Context) {
 		type userInfo struct {
 			Email    string   `json:"email" binding:"required,email,max=64"`
@@ -162,4 +167,12 @@ func (m *VMManager) Bind(g *gin.Engine) {
 
 		c.JSON(http.StatusOK, results)
 	})
+}
+
+func (m *VMManager) validateAPIKey(c *gin.Context) {
+	apiKey := c.Request.Header.Get("X-API-Key")
+	if apiKey != m.apiKey {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Authentication failed"})
+		return
+	}
 }

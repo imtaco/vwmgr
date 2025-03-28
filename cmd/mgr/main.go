@@ -15,6 +15,7 @@ import (
 type appArgs struct {
 	DatabaseURL string `long:"database_url" env:"DATABASE_URL"`
 	BindAddr    string `long:"bind_addr" env:"BIND_ADDR" default:":9090"`
+	APIKey      string `long:"api_key" env:"API_KEY"`
 	SaUserEmail string `long:"sa_user_email" env:"SA_USER_EMAIL"`
 	SaPassword  string `long:"sa_user_password" env:"SA_USER_PASSWORD"`
 }
@@ -42,7 +43,7 @@ func main() {
 		log.Fatalf("fail to get orgSymKey %v", err)
 	}
 
-	mgr := mgr.New(orgSymKeys, db)
+	mgr := mgr.New(orgSymKeys, args.APIKey, db)
 
 	// TODO: switch to prod
 	g := gin.Default()

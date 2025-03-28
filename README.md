@@ -25,6 +25,7 @@ Request
 ```http
 POST /api/users HTTP/1.1
 Content-Type: application/json
+X-Api-Key: <API_KEY>
 
 {
     "name": "test01",
@@ -49,6 +50,7 @@ Request
 ```http
 POST /api/users/test01@foobar.com/reset HTTP/1.1
 Content-Type: application/json
+X-Api-Key: <API_KEY>
 
 {
     "new_password": "barfoobarfoo"
@@ -69,6 +71,7 @@ List all items in the orginzation.
 Request
 ```http
 GET /api/orgs/items HTTP/1.1
+X-Api-Key: <API_KEY>
 ```
 
 Response
@@ -123,6 +126,7 @@ List all collections the departing user belongs to, along with other users who h
 Request
 ```http
 GET /api/users/test01@foobar.com/depart_report HTTP/1.1
+X-Api-Key: <API_KEY>
 ```
 
 Response
