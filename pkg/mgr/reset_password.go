@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 
+	"github.com/google/uuid"
 	"github.com/imtaco/vwmgr/pkg/model"
 	"github.com/imtaco/vwmgr/pkg/pkcs"
 	"github.com/pkg/errors"
@@ -53,14 +54,24 @@ func (m *VMManager) resetUserPassword(
 		}
 	}
 
+	/*
+		The security_stamp is a value associated with a user’s account that reflects their security state.
+		It’s updated whenever critical security-related changes occur, such as:
+		•	Password change
+		•	Enabling/disabling two-factor authentication (2FA)
+		•	Resetting the account key
+		•	Admin forces a logout or resets the password
+		•	Other actions that impact the integrity of the user session
+	*/
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		err := tx.Model(&model.User{}).Where("uuid = ?", user.UUID).
 			Updates(map[string]interface{}{
-				"password_hash": hashPwdHash,
-				"salt":          salt,
-				"akey":          userAkey,
-				"public_key":    pkcs.Base64Encode(publicKey),
-				"private_key":   pkcs.BWSymEncrypt(symKey, privateKey),
+				"password_hash":  hashPwdHash,
+				"salt":           salt,
+				"akey":           userAkey,
+				"public_key":     pkcs.Base64Encode(publicKey),
+				"private_key":    pkcs.BWSymEncrypt(symKey, privateKey),
+				"security_stamp": uuid.NewString(),
 			}).Error
 		if err != nil {
 			return err
@@ -75,8 +86,6 @@ func (m *VMManager) resetUserPassword(
 				return err
 			}
 		}
-
-		// TODO: need to change security_stamp ?
 
 		return nil
 	})
