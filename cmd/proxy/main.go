@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/jessevdk/go-flags"
@@ -46,7 +47,52 @@ func main() {
 		log.Fatalf("fail to parse upstream url %v", err)
 	}
 
+	http.HandleFunc("/vw-mgr-mod.js", func(w http.ResponseWriter, r *http.Request) {
+		// find submit button been created, click then focus on password input
+		script := `
+		const observer = new MutationObserver((mutations, obs) => {
+			const button = document.querySelector('button');
+			if (button) {
+				button.click();
+				setTimeout(() => document.getElementById("bit-input-0").click());
+				obs.disconnect();
+			}
+		});
+		observer.observe(document.body, {
+			childList: true,
+			subtree: true
+		});
+		`
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write([]byte(script))
+	})
+
 	proxy := httputil.NewSingleHostReverseProxy(remote)
+	proxy.ModifyResponse = func(r *http.Response) error {
+		if r.Request.URL.Path != "/" {
+			return nil
+		}
+
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			return err
+		}
+		defer r.Body.Close()
+
+		// this is pretty hacky
+		b = bytes.Replace(b,
+			[]byte("</script></body>"),
+			[]byte("</script><script defer=\"defer\" src=\"vw-mgr-mod.js\"></script></body>"),
+			-1)
+
+		// make sure we set the body, and the relevant headers for well-formed clients to respect
+		r.Body = io.NopCloser(bytes.NewReader(b))
+		r.ContentLength = int64(len(b))
+		r.Header.Set("Content-Length", strconv.Itoa(len(b)))
+
+		return nil
+	}
+
 	handler := func(p *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			// following operation is forbidden
