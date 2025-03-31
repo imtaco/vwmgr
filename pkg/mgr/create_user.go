@@ -8,11 +8,18 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	roleOwner  = 0
+	roleAdmin  = 1
+	roleUser   = 2
+	roleCustom = 3
+)
+
 func (m *VMManager) createUser(
 	email string,
 	name string,
 	masterPassword string,
-	orgUUIDs []string,
+	org2role map[string]int32,
 ) error {
 	userMasterKey := pkcs.DeriveMasterKey(email, masterPassword)
 	passwordHash := pkcs.DerivePasswordHash(userMasterKey, masterPassword)
@@ -32,7 +39,7 @@ func (m *VMManager) createUser(
 	}
 
 	// check orgSymKey first
-	for _, orgUUID := range orgUUIDs {
+	for orgUUID := range org2role {
 		if _, ok := m.orgSymKeys[orgUUID]; !ok {
 			return errors.Errorf("fail to found orr symmetric key of %s", orgUUID)
 		}
@@ -58,7 +65,7 @@ func (m *VMManager) createUser(
 			return err
 		}
 
-		for _, orgUUID := range orgUUIDs {
+		for orgUUID, role := range org2role {
 			userOrg := model.UsersOrganization{
 				UUID:      uuid.NewString(),
 				UserUUID:  uid,
@@ -66,7 +73,7 @@ func (m *VMManager) createUser(
 				Akey:      pkcs.BWPKEncrypt(m.orgSymKeys[orgUUID], pubInf),
 				AccessAll: false,
 				Status:    2,
-				Atype:     3,
+				Atype:     role,
 			}
 			if err := tx.Create(&userOrg).Error; err != nil {
 				return err

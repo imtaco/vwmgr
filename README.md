@@ -31,7 +31,16 @@ X-Api-Key: <API_KEY>
     "name": "test01",
     "email": "test01@foobar.com",
     "password": "foobarfoobar",
-    "org_uuid": ["7ee41f5e-c8b1-4936-84ec-6d8cf5d2d9bd", "47a0c70e-c4f0-4af8-a770-a28cc594fc3d"]
+    "org_info": [
+        {
+            "uuid": "7ee41f5e-c8b1-4936-84ec-6d8cf5d2d9bd",
+            "role": "user"
+        },
+        {
+            "uuid": "47a0c70e-c4f0-4af8-a770-a28cc594fc3d",
+            "role": "custom"
+        }
+    ]
 }
 ```
 

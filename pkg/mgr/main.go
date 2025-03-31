@@ -28,9 +28,31 @@ type VMManager struct {
 	db         *gorm.DB
 }
 
+type orgInfo struct {
+	UUID string `json:"uuid" binding:"required,uuid"`
+	Role string `json:"role" binding:"required,oneof=user custom"`
+}
+type userInfo struct {
+	Email    string    `json:"email" binding:"required,email,max=64"`
+	Name     string    `json:"name" binding:"required,min=2,max=32"`
+	Password string    `json:"password" binding:"required,min=12,max=128"`
+	OrgInfo  []orgInfo `json:"org_info" binding:"required"`
+}
+
+type newPwdInfo struct {
+	NewPassword string `json:"new_password" binding:"required,min=12,max=128"`
+}
+
 type userEmail struct {
 	Email string `uri:"email" binding:"required,email,max=64"`
 }
+
+var (
+	roleName2ID = map[string]int32{
+		"user":   roleUser,
+		"custom": roleCustom,
+	}
+)
 
 func (m *VMManager) Bind(g *gin.Engine) {
 	g.Use(m.validateAPIKey)
@@ -39,12 +61,6 @@ func (m *VMManager) Bind(g *gin.Engine) {
 	g.GET("/_healthz", func(c *gin.Context) {})
 
 	g.POST("/api/users", func(c *gin.Context) {
-		type userInfo struct {
-			Email    string   `json:"email" binding:"required,email,max=64"`
-			Name     string   `json:"name" binding:"required,min=2,max=32"`
-			Password string   `json:"password" binding:"required,min=12,max=128"`
-			OrgUUID  []string `json:"org_uuid" binding:"required,dive,uuid"`
-		}
 		u := userInfo{}
 
 		if err := c.ShouldBindJSON(&u); err != nil {
@@ -54,7 +70,11 @@ func (m *VMManager) Bind(g *gin.Engine) {
 
 		log.Printf("try to register %+v", u)
 
-		if err := m.createUser(u.Email, u.Name, u.Password, u.OrgUUID); err != nil {
+		org2role := map[string]int32{}
+		for _, o := range u.OrgInfo {
+			org2role[o.UUID] = roleName2ID[o.Role]
+		}
+		if err := m.createUser(u.Email, u.Name, u.Password, org2role); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -69,10 +89,7 @@ func (m *VMManager) Bind(g *gin.Engine) {
 			return
 		}
 
-		type userInfo struct {
-			NewPassword string `json:"new_password" binding:"required,min=12,max=128"`
-		}
-		nu := userInfo{}
+		nu := newPwdInfo{}
 		// Bind JSON from request body into `user`
 		if err := c.ShouldBindJSON(&nu); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
