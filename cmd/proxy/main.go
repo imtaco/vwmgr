@@ -48,7 +48,7 @@ func main() {
 	}
 
 	http.HandleFunc("/vw-mgr-mod.js", func(w http.ResponseWriter, r *http.Request) {
-		// find submit button been created, click then focus on password input
+		// Detect when the submit button is created, click it, and focus the password input field.
 		script := `
 		const observer = new MutationObserver((mutations, obs) => {
 			const button = document.querySelector('button');
@@ -120,6 +120,11 @@ func main() {
 			return
 		}
 		http.Redirect(w, r, "/#login?email="+email, http.StatusTemporaryRedirect)
+	})
+
+	// not allow to use device for login
+	http.HandleFunc("/api/devices/knowndevice", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("false"))
 	})
 
 	http.HandleFunc("/", handler(proxy))

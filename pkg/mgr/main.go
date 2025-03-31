@@ -35,6 +35,9 @@ type userEmail struct {
 func (m *VMManager) Bind(g *gin.Engine) {
 	g.Use(m.validateAPIKey)
 
+	// for health check
+	g.GET("/_healthz", func(c *gin.Context) {})
+
 	g.POST("/api/users", func(c *gin.Context) {
 		type userInfo struct {
 			Email    string   `json:"email" binding:"required,email,max=64"`
