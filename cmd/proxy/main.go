@@ -51,6 +51,11 @@ func main() {
 		// Detect when the submit button is created, click it, and focus the password input field.
 		script := `
 		const observer = new MutationObserver((mutations, obs) => {
+			if (!document.location.hash.startsWith('#/login')) {
+				obs.disconnect();
+				return
+			}
+
 			const button = document.querySelector('button');
 			if (button) {
 				button.click();
