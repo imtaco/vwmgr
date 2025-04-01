@@ -2,30 +2,22 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jessevdk/go-flags"
+	"github.com/pkg/errors"
 )
 
 var (
-	// view & rotate api key ?
-	forbidAPIs = map[string]struct{}{
-		"DELETE /api/accounts":                   {}, // delete account
-		"PUT /api/accounts/profile":              {}, // change name
-		"POST /api/organizations/{org_id}/leave": {}, // leave org
-	}
-
 	checkIAPFields = map[string]string{
-		"/prelogin":               "email",    // prelogin to get parameters
-		"/identity/connect/token": "username", // real login
+		"/identity/accounts/prelogin": "email",    // prelogin to get parameters
+		"/identity/connect/token":     "username", // real login
 		// TODO: change pwd
 	}
 )
@@ -47,164 +39,114 @@ func main() {
 		log.Fatalf("fail to parse upstream url %v", err)
 	}
 
-	http.HandleFunc("/vw-mgr-mod.js", func(w http.ResponseWriter, r *http.Request) {
-		// Detect when the submit button is created, click it, and focus the password input field.
-		script := `
-		const observer = new MutationObserver((mutations, obs) => {
-			if (!document.location.hash.startsWith('#/login')) {
-				obs.disconnect();
-				return
-			}
+	g := gin.Default()
 
-			const button = document.querySelector('button');
-			if (button) {
-				button.click();
-				setTimeout(() => document.getElementById("bit-input-0").click());
-				obs.disconnect();
-			}
-		});
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
-		`
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Write([]byte(script))
-	})
+	// for health check of LB or k8s
+	g.GET("/_healthz", func(c *gin.Context) {})
 
-	proxy := httputil.NewSingleHostReverseProxy(remote)
-	proxy.ModifyResponse = func(r *http.Response) error {
-		if r.Request.URL.Path != "/" {
-			return nil
-		}
-
-		b, err := io.ReadAll(r.Body)
-		if err != nil {
-			return err
-		}
-		defer r.Body.Close()
-
-		// this is pretty hacky
-		b = bytes.Replace(b,
-			[]byte("</script></body>"),
-			[]byte("</script><script defer=\"defer\" src=\"vw-mgr-mod.js\"></script></body>"),
-			-1)
-
-		// make sure we set the body, and the relevant headers for well-formed clients to respect
-		r.Body = io.NopCloser(bytes.NewReader(b))
-		r.ContentLength = int64(len(b))
-		r.Header.Set("Content-Length", strconv.Itoa(len(b)))
-
-		return nil
+	notAccept := func(c *gin.Context) {
+		c.JSON(http.StatusNotAcceptable, gin.H{"error": "illegal operation"})
 	}
 
-	handler := func(p *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) {
-		return func(w http.ResponseWriter, r *http.Request) {
-			// following operation is forbidden
-			if _, ok := forbidAPIs[fmt.Sprintf("%s %s", r.Method, r.URL.Path)]; ok {
-				w.WriteHeader(http.StatusNotAcceptable)
-				return
-			}
-
-			if field, ok := checkIAPFields[r.URL.Path]; ok {
-				if (r.Method == http.MethodPost || r.Method == http.MethodPut) && !checkIAP(w, r, field) {
-					return
-				}
-			}
-
-			// need more access logs ?
-			r.Host = remote.Host
-			p.ServeHTTP(w, r)
-		}
-	}
-
-	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+	g.GET("/login", func(c *gin.Context) {
 		// for auto fill email in login form
-		email := getIAPHeader(w, r)
+		email := getIAPHeader(c)
 		if email == "" {
 			return
 		}
-		http.Redirect(w, r, "/#login?email="+email, http.StatusTemporaryRedirect)
+		c.Redirect(http.StatusTemporaryRedirect, "/#login?email="+email)
+	})
+	g.GET("/api/devices/knowndevice", func(c *gin.Context) {
+		c.String(http.StatusOK, "false")
 	})
 
-	// not allow to use device for login
-	http.HandleFunc("/api/devices/knowndevice", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("false"))
-	})
+	// forbid operations
+	g.DELETE("/api/accounts", notAccept)                  // delete account
+	g.PUT("/api/accounts/profile", notAccept)             // change name
+	g.POST("/api/organizations/:org_id/leave", notAccept) // leave org
 
-	http.HandleFunc("/", handler(proxy))
-	if err := http.ListenAndServe(args.BindAddr, nil); err != nil {
-		log.Fatal(err)
-	}
+	proxy := httputil.NewSingleHostReverseProxy(remote)
+
+	g.NoRoute(func(c *gin.Context) {
+		// Verify whether the field matches the IAM email if necessary
+		if field, ok := checkIAPFields[c.Request.URL.Path]; ok {
+			if (c.Request.Method == http.MethodPost || c.Request.Method == http.MethodPut) &&
+				!checkIAP(c, field) {
+				return
+			}
+		}
+		proxy.ServeHTTP(c.Writer, c.Request)
+	})
+	g.Run(args.BindAddr)
 }
 
-func checkIAP(w http.ResponseWriter, r *http.Request, field string) bool {
-	email := getIAPHeader(w, r)
+func checkIAP(c *gin.Context, field string) bool {
+	email := getIAPHeader(c)
 	if email == "" {
 		return false
 	}
-	values, err := parseRequestToMap(r)
+
+	payload, err := parseRequestToMap(c)
 	if err != nil {
-		fmt.Println(err)
-		http.Error(w, "BadRequest: Fail to parse body", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return false
 	}
-	if v, ok := values[field]; ok && v != email {
-		http.Error(w, "Unauthorized: illegail operation", http.StatusUnauthorized)
+	if v, ok := payload[field]; ok && v != email {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "illegal operation"})
 		return false
 	}
 	return true
 }
 
-func getIAPHeader(w http.ResponseWriter, r *http.Request) string {
+func getIAPHeader(c *gin.Context) string {
 	// Get the IAP user email header
-	emailHeader := r.Header.Get("X-Goog-Authenticated-User-Email")
+	emailHeader := c.GetHeader("X-Goog-Authenticated-User-Email")
 	if emailHeader == "" {
-		http.Error(w, "Unauthorized: IAP header missing", http.StatusUnauthorized)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "IAP header missing"})
 		return ""
 	}
 
 	// Extract the email part: accounts.google.com:email@example.com → email@example.com
 	parts := strings.SplitN(emailHeader, ":", 2)
 	if len(parts) != 2 {
-		http.Error(w, "Invalid email header format", http.StatusBadRequest)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email header format"})
 		return ""
 	}
 	return parts[1]
 }
 
-func parseRequestToMap(req *http.Request) (map[string]interface{}, error) {
-	ct := req.Header.Get("Content-Type")
-	result := make(map[string]interface{})
+func parseRequestToMap(c *gin.Context) (map[string]interface{}, error) {
+	data := map[string]interface{}{}
 
-	bodyBytes, err := io.ReadAll(req.Body)
+	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read body failed: %w", err)
+		return nil, errors.Errorf("read body failed: %v", err)
 	}
 	// reset body for reverse proxy
-	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-	req.ContentLength = int64(len(bodyBytes))
+	bodyReader := bytes.NewReader(bodyBytes)
+	c.Request.Body = io.NopCloser(bodyReader)
 
-	switch {
-	case strings.HasPrefix(ct, "application/json"):
-		if err := json.Unmarshal(bodyBytes, &result); err != nil {
-			return nil, fmt.Errorf("invalid JSON: %w", err)
+	switch c.ContentType() {
+	case "application/json":
+		if err := c.ShouldBindJSON(&data); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return nil, nil
 		}
-	case strings.HasPrefix(ct, "application/x-www-form-urlencoded"):
-		values, err := url.ParseQuery(string(bodyBytes))
-		if err != nil {
-			return nil, fmt.Errorf("invalid form: %w", err)
-		}
-		for key, val := range values {
-			if len(val) == 1 {
-				result[key] = val[0]
+	case "application/x-www-form-urlencoded", "multipart/form-data":
+		c.Request.ParseForm()
+		for key, values := range c.Request.PostForm {
+			if len(values) > 1 {
+				data[key] = values
 			} else {
-				result[key] = val
+				data[key] = values[0]
 			}
 		}
 	default:
-		return nil, fmt.Errorf("unsupported content-type: %s", ct)
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "Unsupported Content-Type"})
+		return nil, nil
 	}
 
-	return result, nil
+	// reuse body for reverse proxy
+	bodyReader.Seek(0, io.SeekStart)
+	return data, nil
 }
