@@ -39,6 +39,8 @@ func main() {
 		log.Fatalf("fail to parse upstream url %v", err)
 	}
 
+	// disalbe logs
+	gin.DefaultWriter = io.Discard
 	g := gin.Default()
 
 	// for health check of LB or k8s
