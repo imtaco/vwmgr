@@ -156,5 +156,4 @@ Response
         "collection_name": "foolbar",
     }
 ]
-
 ```
