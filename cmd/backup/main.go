@@ -74,7 +74,7 @@ func main() {
 		log.Fatalf("fail to convert pg URL to dsn %v", err)
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{TranslateError: true})
 	if err != nil {
 		log.Fatal("fail to open DB", err)
 	}

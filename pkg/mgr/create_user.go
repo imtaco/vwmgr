@@ -6,6 +6,7 @@ import (
 	"github.com/imtaco/vwmgr/pkg/pkcs"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -61,14 +62,31 @@ func (m *VMManager) createUser(
 			SecurityStamp:      uuid.NewString(),
 			ClientKdfIter:      pkcs.ITERATIONS,
 		}
-		if err := tx.Create(&user).Error; err != nil {
+		// create if not found
+		err := tx.Clauses(
+			clause.Returning{Columns: []clause.Column{{Name: "uuid"}}},
+			clause.OnConflict{
+				Columns: []clause.Column{{Name: "email"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"name",
+					"password_hash",
+					"salt",
+					"akey",
+					"public_key",
+					"private_key",
+					"security_stamp",
+					"client_kdf_iter",
+				}),
+			},
+		).Create(&user).Error
+		if err != nil {
 			return err
 		}
 
 		for orgUUID, role := range org2role {
 			userOrg := model.UsersOrganization{
 				UUID:      uuid.NewString(),
-				UserUUID:  uid,
+				UserUUID:  user.UUID,
 				OrgUUID:   orgUUID,
 				Akey:      pkcs.BWPKEncrypt(m.orgSymKeys[orgUUID], pubInf),
 				AccessAll: false,
