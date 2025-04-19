@@ -34,24 +34,21 @@ func (m *VMManager) listOrgItems() ([]orgItemDetail, error) {
 		p.name as item_name,
 		(p.data::json)->>'username' as account_name,
 		CASE
-			WHEN uc.manage = TRUE THEN 'manage'
-			WHEN uc.read_only = FALSE THEN 'edit'
+			WHEN uce.manage = TRUE THEN 'manage'
+			WHEN uce.read_only = FALSE THEN 'edit'
 			ELSE 'view'
 		END as access,
 		p.created_at,
 		p.updated_at
 	FROM
-		collections c
+		users_collections_expands uce
+		INNER JOIN collections c ON c.uuid = uce.collection_uuid
 		INNER JOIN organizations o ON o.uuid = c.org_uuid
-		INNER JOIN users_collections uc ON uc.collection_uuid = c.uuid
 		INNER JOIN ciphers_collections cc ON cc.collection_uuid = c.uuid
-		INNER JOIN users u ON u.uuid = uc.user_uuid
+		INNER JOIN users u ON u.uuid = uce.user_uuid
 		INNER JOIN ciphers p ON cc.cipher_uuid = p.uuid
 	WHERE
-		c.org_uuid IS NOT NULL
-		AND p.deleted_at IS NULL
-	ORDER BY
-		1, 2, 3, 4
+		uce.user_org_status = 2
 	`
 
 	if err := m.db.Raw(sql).Scan(&details).Error; err != nil {

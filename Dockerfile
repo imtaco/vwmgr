@@ -18,5 +18,8 @@ RUN CGO_ENABLED=0 go build -o bin/proxy cmd/proxy/main.go
 # Stage 2: Final image using distroless
 FROM gcr.io/distroless/cc-debian12
 
+WORKDIR /app
+
 # Copy only the binary
 COPY --from=builder /app/bin/* /app/
+COPY migration /app/migration

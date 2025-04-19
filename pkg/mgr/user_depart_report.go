@@ -23,24 +23,25 @@ func (m *VMManager) userDepartReport(email string) ([]leaveUserItem, error) {
 	}
 
 	sql := `
-	WITH user_belong_collections AS (
+	WITH depart_user_collections AS (
 		SELECT
-			DISTINCT collection_uuid
+			collection_uuid
 		FROM
-			users_collections
+			users_collections_expands
 		WHERE
-			user_uuid = (SELECT uuid FROM users WHERE email = ?)
+			user_uuid IN (SELECT uuid FROM users WHERE email = ?)
 	),
 	users_collections_detail AS (
 		SELECT
-			uc.collection_uuid,
+			uce.collection_uuid,
 			u.email
 		FROM
-			users_collections uc
-			INNER JOIN users u ON u.uuid = uc.user_uuid
+			users_collections_expands uce
+			INNER JOIN users u ON u.uuid = uce.user_uuid
 		WHERE
-			(uc.manage = TRUE OR uc.read_only = FALSE)
+			(uce.manage = TRUE OR uce.read_only = FALSE)
 			AND u.email != ?
+			AND uce.user_org_status = 2
 	)
 	SELECT
 		c.org_uuid AS org_uuid,
@@ -49,7 +50,7 @@ func (m *VMManager) userDepartReport(email string) ([]leaveUserItem, error) {
 		c.name AS collection_name,
 		ucd.email
 	FROM
-		user_belong_collections ubc
+		depart_user_collections ubc
 		INNER JOIN collections c ON c.uuid = ubc.collection_uuid
 		INNER JOIN organizations o ON o.uuid = c.org_uuid
 		LEFT JOIN users_collections_detail ucd ON ucd.collection_uuid = c.uuid
